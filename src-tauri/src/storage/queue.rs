@@ -4,7 +4,7 @@ use sea_query::{
 };
 use sea_query_binder::SqlxBinder;
 use sqlx::Row;
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::queue::{atomics::QueueType, manager::MANAGER};
 
@@ -36,6 +36,9 @@ impl TableSpec for QueueTable {
     }
 }
 
+// Loads the queue lists and drops the entries that lost their task or
+// scheduler. A stale id renders as an empty card, a scheduler left in two
+// lists renders twice, so the stored lists are repaired on load.
 pub async fn load() -> Result<HashMap<QueueType, Vec<String>>> {
     let (sql, values) = Query::select()
         .columns([Queue::Table, Queue::Name, Queue::Value])
@@ -60,7 +63,54 @@ pub async fn load() -> Result<HashMap<QueueType, Vec<String>>> {
 
         map.insert(key, v);
     }
-    Ok(map)
+
+    let tasks = MANAGER.tasks.read().await;
+    let schedulers = MANAGER.schedulers.read().await;
+
+    let mut seen = HashSet::new();
+    let mut result: HashMap<QueueType, Vec<String>> = HashMap::new();
+
+    for key in [
+        QueueType::Backlog,
+        QueueType::Pending,
+        QueueType::Doing,
+        QueueType::Complete,
+    ] {
+        let mut queue = MANAGER.get_queue(&key).write().await;
+        let before = queue.len();
+        queue.retain(|id| {
+            let known = match key {
+                QueueType::Backlog => tasks.contains_key(id),
+                _ => schedulers.get(id).is_some_and(|v| v.queue.get() == key),
+            };
+            known && seen.insert(id.clone())
+        });
+        let changed = queue.len() != before;
+        let value: VecDeque<String> = queue.iter().cloned().collect();
+        drop(queue);
+        if changed {
+            upsert(key, &value).await?;
+        }
+        result.insert(key, value.into_iter().collect());
+    }
+
+    // A scheduler that lost its entry belongs to the list it reports itself
+    for (sid, scheduler) in schedulers.iter() {
+        let key = scheduler.queue.get();
+        if key == QueueType::Backlog || seen.contains(sid) {
+            continue;
+        }
+        let mut queue = MANAGER.get_queue(&key).write().await;
+        queue.push_back(sid.clone());
+        let value: VecDeque<String> = queue.iter().cloned().collect();
+        drop(queue);
+        upsert(key, &value).await?;
+        if let Some(value) = result.get_mut(&key) {
+            value.push(sid.clone());
+        }
+    }
+
+    Ok(result)
 }
 
 pub async fn upsert(name: QueueType, value: &VecDeque<String>) -> Result<()> {

@@ -68,6 +68,24 @@ impl Manager {
         }
     }
 
+    // A scheduler has to sit in exactly one list. Concurrent moves could leave
+    // a copy behind, the download page then lists the same scheduler twice.
+    async fn drop_from_queues(&self, sid: &str, keep: Option<QueueType>) -> Result<()> {
+        for q in [QueueType::Pending, QueueType::Doing, QueueType::Complete] {
+            if Some(q) == keep {
+                continue;
+            }
+            let mut list = self.get_queue(&q).write().await;
+            let Some(pos) = list.iter().position(|v| v == sid) else {
+                continue;
+            };
+            list.remove(pos);
+            frontend::queue(&q, &list)?;
+            queue::upsert(q, &list).await?;
+        }
+        Ok(())
+    }
+
     async fn submit_backlog(&self, id: String, value: TaskView) -> Result<()> {
         let to = QueueType::Backlog;
 
@@ -122,29 +140,25 @@ impl Manager {
         let Ok(scheduler) = self.get_scheduler(sid).await else {
             return Ok(());
         };
-        let f = scheduler.queue.get();
-
-        if f == t || t == QueueType::Backlog {
+        if t == QueueType::Backlog {
             return Ok(());
         }
 
-        let mut from = self.get_queue(&f).write().await;
-        if let Some(pos) = from.iter().position(|v| v == sid) {
-            from.remove(pos);
-        }
-        frontend::queue(&f, &from)?;
-        queue::upsert(f, &from).await?;
-        drop(from);
+        let f = scheduler.queue.get();
+        self.drop_from_queues(sid, Some(t)).await?;
 
         let mut to = self.get_queue(&t).write().await;
-        to.push_back(sid.to_string());
-        frontend::queue(&t, &to)?;
-        queue::upsert(t, &to).await?;
+        if !to.iter().any(|v| v == sid) {
+            to.push_back(sid.to_string());
+            frontend::queue(&t, &to)?;
+            queue::upsert(t, &to).await?;
+        }
         drop(to);
 
-        scheduler.queue(t).await?;
-
-        log::info!("Scheduler#{sid} moved: from {f:?} to {t:?}");
+        if f != t {
+            scheduler.queue(t).await?;
+            log::info!("Scheduler#{sid} moved: from {f:?} to {t:?}");
+        }
         Ok(())
     }
 
@@ -181,15 +195,7 @@ impl Manager {
             schedulers.remove(sid);
             drop(schedulers);
 
-            let q = scheduler.queue.get();
-
-            let mut queue = self.get_queue(&q).write().await;
-            if let Some(pos) = queue.iter().position(|v| v == sid) {
-                queue.remove(pos);
-            }
-
-            frontend::queue(&q, &queue)?;
-            queue::upsert(q, &queue).await?;
+            self.drop_from_queues(sid, None).await?;
         }
         Ok(())
     }
