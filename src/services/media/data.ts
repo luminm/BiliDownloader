@@ -745,9 +745,10 @@ export async function getMediaInfo(
           id: v.meta.series_id,
           name: v.meta.name,
         }));
-    // The first tab holds every upload of the space, the rest a collection
+    // The first tab holds every upload of the space, the rest a collection.
+    // Only a link that points at one collection opens that collection.
     const sections = {
-      target: options?.target ?? collections[0]?.id ?? 0,
+      target: options?.target ?? 0,
       tabs: [
         { id: 0, name: i18n.global.t('search.allUploads') },
         ...collections,
