@@ -186,7 +186,8 @@ pub async fn add_meta(
     let date = utc.to_offset(offset);
     let fmt = format_description!("[year]-[month]-[day]");
 
-    if let Some(thumb) = nfo.thumbs.first() {
+    // The FLAC muxer takes a single FLAC stream only and rejects a cover
+    if let Some(thumb) = nfo.thumbs.first().filter(|_| !is_flac) {
         let cover_url = format!("{}@.jpg", thumb.url);
         let cover = &req.temp.join(random_string(8)).with_extension("jpg");
         get_image(cover, &cover_url).await?;
