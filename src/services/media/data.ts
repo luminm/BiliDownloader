@@ -17,6 +17,46 @@ import i18n from '@/i18n';
 const SPACE_PAGE_SIZE = 50;
 // Guard against an endless loop if the API keeps answering with items
 const SPACE_PAGE_LIMIT = 400;
+// The two collection endpoints page with different parameter names
+const COLLECTION_ENDPOINTS = {
+  season: {
+    url: 'https://api.bilibili.com/x/polymer/web-space/seasons_archives_list',
+    page: 'page_num',
+    size: 'page_size',
+  },
+  series: {
+    url: 'https://api.bilibili.com/x/series/archives',
+    page: 'pn',
+    size: 'ps',
+  },
+} as const;
+
+// Loads every archive of a collection, the API caps a page at 50 items
+async function getCollectionArchives(
+  kind: keyof typeof COLLECTION_ENDPOINTS,
+  ids: Record<string, string | number | undefined>,
+) {
+  const endpoint = COLLECTION_ENDPOINTS[kind];
+  const list: Resps.UploadsArchive[] = [];
+  let total = Infinity;
+  for (let page = 1; list.length < total && page <= SPACE_PAGE_LIMIT; page++) {
+    const body = (await tryFetch(endpoint.url, {
+      params: {
+        ...ids,
+        [endpoint.page]: page,
+        [endpoint.size]: SPACE_PAGE_SIZE,
+      },
+    })) as Resps.UploadsArchivesInfo;
+    const archives = body.data.archives;
+    if (!archives.length) break;
+    list.push(...archives);
+    // Older responses omit the page block, a short page then ends the collection
+    total =
+      body.data.page?.total ??
+      (archives.length < SPACE_PAGE_SIZE ? list.length : Infinity);
+  }
+  return list;
+}
 
 async function getSpaceUploads(mid: string | undefined) {
   const url = 'https://api.bilibili.com/x/space/wbi/arc/search';
@@ -740,21 +780,17 @@ export async function getMediaInfo(
       }));
     } else {
       const isSeason = seasons_list.some((v) => v.meta.season_id === target);
-      const listBody = (await tryFetch(
-        isSeason
-          ? 'https://api.bilibili.com/x/polymer/web-space/seasons_archives_list'
-          : 'https://api.bilibili.com/x/series/archives',
-        {
-          params: {
-            ...params,
-            ...(isSeason ? { season_id: target } : { series_id: target }),
-          },
-        },
-      )) as Resps.UploadsArchivesInfo;
       const meta = (isSeason ? seasons_list : series_list).find(
         (v) => (isSeason ? v.meta.season_id : v.meta.series_id) === target,
       )?.meta;
       if (!meta) throw new AppError(`No meta found for target ${target}`);
+      const archives = await getCollectionArchives(
+        isSeason ? 'season' : 'series',
+        {
+          mid: idNum,
+          ...(isSeason ? { season_id: target } : { series_id: target }),
+        },
+      );
       nfo = {
         showtitle: meta.name,
         intro: meta.description,
@@ -765,7 +801,7 @@ export async function getMediaInfo(
         thumbs: getPublicImages(meta),
         premiered: meta.ptime,
       };
-      list = listBody.data.archives.map((item, index) => ({
+      list = archives.map((item, index) => ({
         title: item.title,
         cover: item.pic,
         desc: meta.description, // fallback

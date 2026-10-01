@@ -508,8 +508,8 @@ export interface UploadsInfo {
     };
     page?: {
       count: number;
-      num: number;
-      size: number;
+      pn: number;
+      ps: number;
     };
   };
 }
@@ -561,6 +561,9 @@ export interface UploadsArchivesInfo {
   ttl: number;
   data: {
     archives: UploadsArchive[];
+    page?: {
+      total: number;
+    };
   };
 }
 
