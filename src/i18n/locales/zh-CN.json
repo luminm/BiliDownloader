@@ -190,7 +190,8 @@
     "general": "常规下载",
     "export": "导出数据",
     "exported": "已导出数据至 {0}",
-    "selectAll": "全选"
+    "selectAll": "全选",
+    "allUploads": "全部投稿"
   },
   "history": {
     "title": "历史记录",

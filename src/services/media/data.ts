@@ -10,6 +10,33 @@ import { useUserStore } from '@/store';
 import { AppError } from '../error';
 import * as Resps from '@/types/media/data.d';
 import * as Types from '@/types/shared.d';
+import i18n from '@/i18n';
+
+// Page size used when loading every upload of a space, the API caps a page
+// at 50 items
+const SPACE_PAGE_SIZE = 50;
+// Guard against an endless loop if the API keeps answering with items
+const SPACE_PAGE_LIMIT = 400;
+
+async function getSpaceUploads(mid: string | undefined) {
+  const url = 'https://api.bilibili.com/x/space/wbi/arc/search';
+  const list: Resps.UploadsInfo['data']['list']['vlist'] = [];
+  let total = Infinity;
+  for (let pn = 1; list.length < total && pn <= SPACE_PAGE_LIMIT; pn++) {
+    const body = (await tryFetch(url, {
+      params: { mid, ps: SPACE_PAGE_SIZE, pn },
+      auth: 'wbi',
+    })) as Resps.UploadsInfo;
+    const vlist = body.data.list.vlist;
+    if (!vlist.length) break;
+    list.push(...vlist);
+    // Older responses omit the page block, a short page then ends the space
+    total =
+      body.data.page?.count ??
+      (vlist.length < SPACE_PAGE_SIZE ? list.length : Infinity);
+  }
+  return list;
+}
 
 export async function getMediaInfo(
   id: string,
@@ -669,94 +696,28 @@ export async function getMediaInfo(
     const { seasons_list, series_list } = (body as Resps.UploadsSeriesInfo).data
       .items_lists;
     const upper = await getUserInfo(idNum);
-    let sections = undefined;
+    const collections = seasons_list.length
+      ? seasons_list.map((v) => ({
+          id: v.meta.season_id,
+          name: v.meta.name,
+        }))
+      : series_list.map((v) => ({
+          id: v.meta.series_id,
+          name: v.meta.name,
+        }));
+    // The first tab holds every upload of the space, the rest a collection
+    const sections = {
+      target: options?.target ?? collections[0]?.id ?? 0,
+      tabs: [
+        { id: 0, name: i18n.global.t('search.allUploads') },
+        ...collections,
+      ],
+    };
+    const target = sections.target;
     let nfo;
     let list;
-    if (seasons_list.length || series_list.length) {
-      let target = options?.target;
-      let archives;
-      let meta;
-
-      if (seasons_list.length) {
-        if (!target) target = seasons_list[0].meta.season_id;
-        const listBody = (await tryFetch(
-          'https://api.bilibili.com/x/polymer/web-space/seasons_archives_list',
-          {
-            params: {
-              ...params,
-              season_id: target,
-            },
-          },
-        )) as Resps.UploadsArchivesInfo;
-        sections = {
-          target,
-          tabs: seasons_list.map((v) => ({
-            id: v.meta.season_id,
-            name: v.meta.name,
-          })),
-        };
-        archives = listBody.data.archives;
-        meta = seasons_list.find((v) => v.meta.season_id === target)?.meta;
-      } else {
-        if (!target) target = series_list[0].meta.series_id;
-        const listBody = (await tryFetch(
-          'https://api.bilibili.com/x/series/archives',
-          {
-            params: {
-              ...params,
-              series_id: target,
-            },
-          },
-        )) as Resps.UploadsArchivesInfo;
-        sections = {
-          target,
-          tabs: series_list.map((v) => ({
-            id: v.meta.series_id,
-            name: v.meta.name,
-          })),
-        };
-        archives = listBody.data.archives;
-        meta = series_list.find((v) => v.meta.series_id === target)?.meta;
-      }
-
-      if (!meta) throw new AppError(`No meta found for target ${target}`);
-
-      nfo = {
-        showtitle: meta.name,
-        intro: meta.description,
-        tags: [],
-        url: `https://space.bilibili.com/${upper.mid}/lists/${target}`,
-        stat: {},
-        upper,
-        thumbs: getPublicImages(meta),
-        premiered: meta.ptime,
-      };
-      list = archives.map((item, index) => ({
-        title: item.title,
-        cover: item.pic,
-        desc: meta.description, // fallback
-        url: `https://www.bilibili.com/video/${item.bvid}`,
-        aid: item.aid,
-        bvid: item.bvid,
-        duration: item.duration,
-        pubtime: item.pubdate,
-        type: Types.MediaType.Video,
-        isTarget: index === 0,
-        index,
-      }));
-    } else {
-      const listBody = (await tryFetch(
-        'https://api.bilibili.com/x/space/wbi/arc/search',
-        {
-          params: {
-            mid: idNum,
-            ps: 25,
-            pn: options?.pn ?? 1,
-          },
-          auth: 'wbi',
-        },
-      )) as Resps.UploadsInfo;
-      const { vlist } = listBody.data.list;
+    if (target === 0) {
+      const vlist = await getSpaceUploads(idNum);
       nfo = {
         tags: [],
         stat: {},
@@ -777,11 +738,51 @@ export async function getMediaInfo(
         isTarget: index === 0,
         index,
       }));
+    } else {
+      const isSeason = seasons_list.some((v) => v.meta.season_id === target);
+      const listBody = (await tryFetch(
+        isSeason
+          ? 'https://api.bilibili.com/x/polymer/web-space/seasons_archives_list'
+          : 'https://api.bilibili.com/x/series/archives',
+        {
+          params: {
+            ...params,
+            ...(isSeason ? { season_id: target } : { series_id: target }),
+          },
+        },
+      )) as Resps.UploadsArchivesInfo;
+      const meta = (isSeason ? seasons_list : series_list).find(
+        (v) => (isSeason ? v.meta.season_id : v.meta.series_id) === target,
+      )?.meta;
+      if (!meta) throw new AppError(`No meta found for target ${target}`);
+      nfo = {
+        showtitle: meta.name,
+        intro: meta.description,
+        tags: [],
+        url: `https://space.bilibili.com/${upper.mid}/lists/${target}`,
+        stat: {},
+        upper,
+        thumbs: getPublicImages(meta),
+        premiered: meta.ptime,
+      };
+      list = listBody.data.archives.map((item, index) => ({
+        title: item.title,
+        cover: item.pic,
+        desc: meta.description, // fallback
+        url: `https://www.bilibili.com/video/${item.bvid}`,
+        aid: item.aid,
+        bvid: item.bvid,
+        duration: item.duration,
+        pubtime: item.pubdate,
+        type: Types.MediaType.Video,
+        isTarget: index === 0,
+        index,
+      }));
     }
     return {
       type,
       id,
-      pn: true,
+      pn: target !== 0,
       sections,
       nfo,
       list,

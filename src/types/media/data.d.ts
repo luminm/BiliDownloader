@@ -506,6 +506,11 @@ export interface UploadsInfo {
         created: number;
       }[];
     };
+    page?: {
+      count: number;
+      num: number;
+      size: number;
+    };
   };
 }
 
