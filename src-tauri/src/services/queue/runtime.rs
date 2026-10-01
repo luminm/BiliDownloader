@@ -163,7 +163,16 @@ impl Ctrl {
             CtrlEvent::Cancel => {
                 scheduler.cancel().await?;
             }
-            CtrlEvent::Retry => {}
+            CtrlEvent::Retry => {
+                // Re-run every task of the scheduler that is not finished yet
+                let scheduler = scheduler.clone();
+                tauri::async_runtime::spawn(async move {
+                    let _ = scheduler
+                        .dispatch()
+                        .await
+                        .map_err(|e| crate::shared::process_err(e, "dispatch"));
+                });
+            }
             CtrlEvent::Pause => {
                 let list = scheduler.list.read().await.clone();
                 for id in list {

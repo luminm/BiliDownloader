@@ -11,11 +11,7 @@
       </div>
     </div>
     <Empty v-if="!tasks.length" :text="$t('down.empty')" />
-    <VList
-      v-slot="{ item }"
-      :data="tasks"
-      class="contain-paint!"
-    >
+    <VList v-slot="{ item }" :data="tasks" class="contain-paint!">
       <Task :sid="sche.sid" :task="item" />
     </VList>
   </div>
@@ -55,6 +51,9 @@ const buttons = computed(() => ({
   ...(props.sche.state === 'paused' && {
     resume: 'fa-play',
   }),
+  ...(props.sche.state === 'failed' && {
+    retry: 'fa-rotate-right',
+  }),
   openFolder: 'fa-folder-open',
   cancel: 'fa-trash',
 }));
@@ -66,7 +65,7 @@ async function event(event: CtrlEvent | 'openFolder' | 'start') {
       ? await commands.openFolder(sid, null)
       : event === 'start'
         ? await commands.ctrlEvent('resume', sid, null)
-      : await commands.ctrlEvent(event, sid, null);
+        : await commands.ctrlEvent(event, sid, null);
   if (result.status === 'error') throw result.error;
 }
 </script>
