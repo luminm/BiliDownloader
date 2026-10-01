@@ -58,7 +58,15 @@ impl SchedulerView {
 impl Scheduler {
     pub fn new(sid: String, list: Vec<String>, top_folder: PathBuf) -> Arc<Self> {
         let folder = if config::read().organize.top_folder {
-            get_unique_path(config::read().down_dir.join(top_folder))
+            let down_dir = config::read().down_dir.clone();
+            let path = down_dir.join(&top_folder);
+            // An empty naming result would place the download next to the
+            // output folder
+            if path == down_dir {
+                down_dir
+            } else {
+                get_unique_path(path)
+            }
         } else {
             config::read().down_dir.clone()
         };
