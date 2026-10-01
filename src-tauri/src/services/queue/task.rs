@@ -246,9 +246,11 @@ impl Task {
 
         let res = handlers::handle_postprocess(scheduler, &temp, self.clone()).await;
 
-        fs::remove_dir_all(&*temp)
-            .await
-            .context(format!("Failed to cleanup temp folder for {id}"))?;
+        // The output is already written, a leftover temp folder must not fail
+        // the task
+        if let Err(e) = fs::remove_dir_all(&*temp).await {
+            log::warn!("Failed to cleanup temp folder for {id}: {e:#}");
+        }
 
         res
     }
@@ -267,6 +269,8 @@ impl Task {
         };
 
         /* BACKEND */
+        // The frontend corrects the quality to the one the source supports
+        *self.select.write().await = prepare.select.to_owned();
         *self.nfo.write().await = prepare.nfo.to_owned();
         *self.subtasks.write().await = prepare.subtasks.to_owned();
         *self.folder.write().await = folder;
