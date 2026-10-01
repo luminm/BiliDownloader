@@ -145,7 +145,6 @@
     "risk": "触发风控，请进行验证",
     "checkUpdate": "请在 GitHub 检查最新更新",
     "invalidInput": "无法解析输入",
-    "selectLimit": "不建议一次选择超过 30 个选项",
     "skipTask": "任务 {0} 无{1}，跳过该子任务"
   },
   "drag": {

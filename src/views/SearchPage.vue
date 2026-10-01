@@ -98,7 +98,7 @@
 import { MediaInfo, MediaList } from '@/components/SearchPage';
 import { Dropdown, Empty } from '@/components';
 
-import { nextTick, onActivated, reactive, ref, watch } from 'vue';
+import { nextTick, onActivated, reactive, ref } from 'vue';
 import * as log from '@tauri-apps/plugin-log';
 import pLimit from 'p-limit';
 
@@ -191,13 +191,6 @@ async function updateTab(t: number) {
   v.searching = false;
   updateIndex();
 }
-
-watch(
-  () => v.checkboxs.length,
-  (len) => {
-    if (len > 30) AppLog(i18n.global.t('error.selectLimit'), 'warning');
-  },
-);
 
 onActivated(() => {
   // Force VList to refresh after keep-alive activation. DO NOT DELETE IT.
