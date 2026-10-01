@@ -42,6 +42,7 @@ pub struct Settings {
     pub max_conc: usize,
     pub max_ffmpeg: usize,
     pub notify: bool,
+    pub select_popup: bool,
     pub temp_dir: PathBuf,
     pub theme: Theme,
     pub window_effect: WindowEffect,

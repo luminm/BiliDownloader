@@ -276,7 +276,9 @@ async function initPopup() {
   );
   await Promise.all(tasks);
   const item = v.mediaInfo.list[v.checkboxs[0]];
-  const select = await components.c.selectPopup?.getSelect(item);
+  const select = settings.select_popup
+    ? await components.c.selectPopup?.getSelect(item)
+    : components.c.selectPopup?.getDefaultSelect(item);
   if (!select) return;
   queue.submit(v.mediaInfo, select, v.checkboxs);
   const page = await components.navigate('downPage');

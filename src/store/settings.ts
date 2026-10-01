@@ -31,6 +31,7 @@ export const useSettingsStore = defineStore('settings', () => {
     max_conc: Number(),
     max_ffmpeg: Number(),
     notify: true,
+    select_popup: false,
     temp_dir: String(),
     theme: 'auto',
     window_effect: 'auto',

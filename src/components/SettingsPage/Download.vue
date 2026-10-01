@@ -18,6 +18,15 @@
   <hr />
   <section>
     <h3>
+      <i :class="[$fa.weight, 'fa-list-check']"></i>
+      <span>{{ $t('settings.select_popup.name') }}</span>
+    </h3>
+    <Switch v-model="settings.select_popup" />
+    <span class="desc">{{ $t('settings.select_popup.desc') }}</span>
+  </section>
+  <hr />
+  <section>
+    <h3>
       <i :class="[$fa.weight, 'fa-angles-down']"></i>
       <span>{{ $t('settings.max_conc.name') }}</span>
     </h3>
@@ -71,7 +80,7 @@
 <script lang="ts" setup>
 import { QualityMap } from '@/types/shared.d';
 import { useSettingsStore } from '@/store';
-import { Dropdown } from '@/components';
+import { Dropdown, Switch } from '@/components';
 
 const settings = useSettingsStore();
 

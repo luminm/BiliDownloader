@@ -106,7 +106,7 @@
 <script lang="ts" setup>
 import * as Types from '@/types/shared.d';
 import { computed, reactive } from 'vue';
-import { useUserStore } from '@/store';
+import { useSettingsStore, useUserStore } from '@/store';
 import { getNfoByItem, getPlayUrl } from '@/services/media/data';
 import { getAISummary, getSubtitle } from '@/services/media/extras';
 import { getDefaultQuality } from '@/services/utils';
@@ -202,7 +202,44 @@ const options = computed(() => ({
   },
 }));
 
-defineExpose({ getSelect });
+defineExpose({ getSelect, getDefaultSelect });
+
+// Parameters used when the selection dialog is disabled. Music only carries
+// an audio stream, opus entries carry no stream at all, everything else is
+// downloaded as audio + video with the quality from the settings.
+function getDefaultSelect(item: Types.MediaItem): Types.PopupSelect {
+  const settings = useSettingsStore();
+  const opus = item.type === Types.MediaType.Opus;
+  const music = item.type === Types.MediaType.Music;
+  const media: Types.PopupSelect['media'] = {
+    video: false,
+    audio: music,
+    audioVideo: !opus && !music,
+  };
+  return {
+    res: settings.default.res,
+    abr: settings.default.abr,
+    enc: settings.default.enc,
+    fmt: Types.StreamFormat.Dash,
+    misc: {
+      opusContent: opus,
+      opusImages: opus,
+      aiSummary: false,
+      subtitles: false,
+    },
+    nfo: {
+      album: false,
+      single: false,
+    },
+    danmaku: {
+      live: false,
+      history: false,
+    },
+    thumb: [],
+    media,
+  };
+}
+
 async function getSelect(item: Types.MediaItem, select?: Types.PopupSelect) {
   const promise = new Promise<null | Types.PopupSelect>((res) => {
     v.promise.resolve = res;

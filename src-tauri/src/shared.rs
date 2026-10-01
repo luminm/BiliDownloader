@@ -82,6 +82,8 @@ pub static CONFIG: LazyLock<ArcSwap<Settings>> = LazyLock::new(|| {
             .map(|n| n.get().saturating_sub(4).clamp(4, 20))
             .unwrap_or(8),
         notify: true,
+        // Off by default: the download parameters are picked automatically
+        select_popup: false,
         temp_dir: get_app_handle()
             .path()
             .temp_dir()
