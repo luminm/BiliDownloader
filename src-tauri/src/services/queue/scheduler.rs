@@ -19,7 +19,7 @@ use crate::{
     TauriResult,
 };
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 enum Phase {
     Download,
     Postprocess,
@@ -175,7 +175,10 @@ impl Scheduler {
                     Ok(_) if matches!(phase, Phase::Postprocess) => {
                         task.state(TaskState::Completed).await
                     }
-                    Err(_) => task.state(TaskState::Failed).await,
+                    Err(e) => {
+                        process_err(e, &format!("Task#{} ({phase:?})", task.id));
+                        task.state(TaskState::Failed).await
+                    }
                     _ => Ok(()),
                 }?;
                 res
